@@ -1,234 +1,218 @@
 package com.gozcu.ui;
 
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.control.*;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
-import com.gozcu.model.Alarm;
-import com.gozcu.repository.AlarmRepository;
+import com.gozcu.inference.CameraManager;
+import com.gozcu.inference.DetectionResult;
 import com.gozcu.model.Camera;
 import com.gozcu.repository.CameraRepository;
 import com.gozcu.util.AppSettings;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
+import javafx.geometry.*;
+import javafx.scene.control.*;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.*;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.util.List;
 
+/**
+ * CameraManager'dan mevcut stream'i okur — kopyası yok.
+ * Operatör bir kamerayı seçip odaklanabilir.
+ */
 public class LiveMonitorView {
 
-    private final CameraRepository cameraRepository = new CameraRepository();
+    private final CameraRepository camRepo = new CameraRepository();
+    private final CameraManager    camMgr  = CameraManager.getInstance();
 
-    private Label statusBadge;
-    private Label confidenceValue;
+    private ImageView   cameraView;
+    private Label       statusBadge;
+    private Label       confidenceLabel;
     private ProgressBar confidenceBar;
-    private Label lastDetectionText;
-    private VBox cameraArea;
+    private Label       detectionTypeLabel;
+    private Label       locationLabel;
+    private Label       fpsLabel;
 
-    public VBox getView() {
-        VBox root = new VBox(22);
-        root.setPadding(new Insets(30));
-        root.setStyle("-fx-background-color: #f4f6f8;");
+    private int focusedCamId = -1;
 
-        Label title = new Label("Canlı İzleme");
-        title.setStyle("-fx-font-size: 30px; -fx-font-weight: bold; -fx-text-fill: #1f2937;");
+    public VBox getView() { return getView(null); }
 
-        Label description = new Label("Kamera görüntüsü ve anlık duman tespiti bu ekranda izlenir.");
-        description.setStyle("-fx-font-size: 16px; -fx-text-fill: #4b5563;");
+    public VBox getView(Camera preselected) {
+        VBox root = new VBox(20);
+        root.setPadding(new Insets(28));
+        root.setStyle("-fx-background-color: #0f172a;");
 
-        HBox topControls = new HBox(15);
-        topControls.setAlignment(Pos.CENTER_LEFT);
+        // ── Başlık ───────────────────────────────────────────────────────────
+        Label title = new Label("Canlı İzleme — Odak Modu");
+        title.setStyle("-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #f1f5f9;");
+        Label desc = new Label("Seçili kameranın büyük görünümü ve tespit detayları.");
+        desc.setStyle("-fx-font-size: 13px; -fx-text-fill: #64748b;");
 
-        ComboBox<Camera> cameraComboBox = new ComboBox<>();
+        // ── Kamera seçimi ─────────────────────────────────────────────────────
+        List<Camera> cameras = camRepo.findAllCameras();
+        ComboBox<Camera> combo = new ComboBox<>(FXCollections.observableArrayList(cameras));
+        combo.setPrefWidth(260);
+        combo.setPromptText("Kamera seç...");
+        if (preselected != null) combo.setValue(preselected);
+        else if (!cameras.isEmpty()) combo.setValue(cameras.get(0));
 
-        cameraComboBox.setItems(FXCollections.observableArrayList(
-                cameraRepository.findAllCameras()
-        ));
+        statusBadge = new Label("● —");
+        statusBadge.setStyle(styleNormal());
+        fpsLabel = new Label("FPS: —");
+        fpsLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #64748b; -fx-font-weight: bold;");
 
-        if (!cameraComboBox.getItems().isEmpty()) {
-            cameraComboBox.setValue(cameraComboBox.getItems().get(0));
-        }
-
-        cameraComboBox.setPrefWidth(260);
-
-        statusBadge = new Label("SİSTEM NORMAL");
-        statusBadge.setStyle(getNormalBadgeStyle());
-
-        Button testAlarmButton = new Button("Test Alarmı Üret");
-        testAlarmButton.setStyle(
-                "-fx-background-color: #dc2626;" +
-                        "-fx-text-fill: white;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-padding: 10 18;" +
-                        "-fx-background-radius: 10;" +
-                        "-fx-cursor: hand;"
-        );
-        testAlarmButton.setOnAction(e -> {
-            Camera selectedCamera = cameraComboBox.getValue();
-
-            if (selectedCamera == null) {
-                Alert alert = new Alert(Alert.AlertType.WARNING);
-                alert.setTitle("Kamera Seçilmedi");
-                alert.setHeaderText(null);
-                alert.setContentText("Lütfen önce Kameralar ekranından bir kamera ekle.");
-                alert.showAndWait();
-                return;
-            }
-
-            simulateSmokeDetection(selectedCamera);
+        Button focusBtn = new Button("⬡  Odaklan");
+        focusBtn.setStyle("-fx-background-color:#f97316;-fx-text-fill:white;-fx-font-weight:bold;-fx-padding:8 16;-fx-background-radius:10;-fx-cursor:hand;");
+        focusBtn.setOnAction(e -> {
+            Camera cam = combo.getValue();
+            if (cam != null) focusCamera(cam);
         });
-        topControls.getChildren().addAll(cameraComboBox, statusBadge, testAlarmButton);
 
-        HBox mainContent = new HBox(20);
+        HBox controls = new HBox(12, combo, statusBadge, fpsLabel, focusBtn);
+        controls.setAlignment(Pos.CENTER_LEFT);
 
-        cameraArea = new VBox(15);
-        cameraArea.setAlignment(Pos.CENTER);
-        cameraArea.setPrefSize(620, 390);
-        cameraArea.setStyle(
-                "-fx-background-color: #111827;" +
-                        "-fx-background-radius: 16;" +
-                        "-fx-border-radius: 16;"
-        );
+        // ── Video + Panel ─────────────────────────────────────────────────────
+        HBox content = new HBox(16);
 
-        Label cameraPlaceholder = new Label("Kamera Görüntüsü");
-        cameraPlaceholder.setStyle("-fx-text-fill: white; -fx-font-size: 26px; -fx-font-weight: bold;");
+        StackPane camPane = new StackPane();
+        camPane.setMinSize(660, 496);
+        camPane.setPrefSize(700, 525);
+        camPane.setStyle("-fx-background-color: #020617; -fx-background-radius: 14;");
 
-        Label cameraInfo = new Label("Model entegrasyonu sonrası canlı görüntü burada yer alacak.");
-        cameraInfo.setStyle("-fx-text-fill: #9ca3af; -fx-font-size: 14px;");
+        cameraView = new ImageView();
+        cameraView.setFitWidth(700); cameraView.setFitHeight(525);
+        cameraView.setPreserveRatio(true);
 
-        cameraArea.getChildren().addAll(cameraPlaceholder, cameraInfo);
+        Label placeholder = new Label("Kamera seçin ve Odaklan'a basın");
+        placeholder.setStyle("-fx-text-fill: #334155; -fx-font-size: 16px;");
 
-        VBox detectionPanel = createPanel("Tespit Bilgisi");
-        detectionPanel.setPrefSize(360, 390);
+        camPane.getChildren().addAll(placeholder, cameraView);
 
-        Label confidenceTitle = new Label("Güven Oranı");
-        confidenceTitle.setStyle("-fx-font-size: 14px; -fx-text-fill: #6b7280;");
+        VBox panel = buildDetectionPanel();
+        panel.setPrefWidth(300);
 
-        confidenceValue = new Label("%0");
-        confidenceValue.setStyle("-fx-font-size: 36px; -fx-font-weight: bold; -fx-text-fill: #111827;");
+        content.getChildren().addAll(camPane, panel);
+        root.getChildren().addAll(title, desc, controls, content);
 
-        confidenceBar = new ProgressBar(0);
-        confidenceBar.setPrefWidth(280);
+        // Sayfa kapanınca listener temizle
+        root.sceneProperty().addListener((obs, old, ns) -> {
+            if (ns == null && focusedCamId != -1) {
+                camMgr.removeListeners(focusedCamId);
+                focusedCamId = -1;
+            }
+        });
 
-        lastDetectionText = new Label("Henüz duman tespiti yapılmadı.");
-        lastDetectionText.setWrapText(true);
-        lastDetectionText.setStyle("-fx-font-size: 14px; -fx-text-fill: #4b5563;");
-
-        detectionPanel.getChildren().addAll(
-                confidenceTitle,
-                confidenceValue,
-                confidenceBar,
-                createInfoRow("Alarm Türü", "-"),
-                createInfoRow("Konum", "-"),
-                createInfoRow("Son Tespit", "-"),
-                lastDetectionText
-        );
-
-        mainContent.getChildren().addAll(cameraArea, detectionPanel);
-
-        root.getChildren().addAll(title, description, topControls, mainContent);
+        // Preselected varsa hemen odakla
+        if (preselected != null) {
+            Platform.runLater(() -> focusCamera(preselected));
+        }
 
         return root;
     }
 
-    private void simulateSmokeDetection(Camera selectedCamera) {
-        statusBadge.setText("DUMAN ALGILANDI");
-        statusBadge.setStyle(getDangerBadgeStyle());
+    // ── Odaklanma ─────────────────────────────────────────────────────────────
 
-        String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"));
-        int simulatedConfidence = 87;
+    private void focusCamera(Camera camera) {
+        // Eski listener'ı temizle
+        if (focusedCamId != -1) camMgr.removeListeners(focusedCamId);
+        focusedCamId = camera.getId();
 
-        if (simulatedConfidence < AppSettings.getMinimumConfidence()) {
-            statusBadge.setText("EŞİK ALTINDA");
-            statusBadge.setStyle(getNormalBadgeStyle());
-
-            confidenceValue.setText("%" + simulatedConfidence);
-            confidenceBar.setProgress(simulatedConfidence / 100.0);
-
-            lastDetectionText.setText(
-                    "Duman benzeri hareket algılandı fakat güven oranı minimum eşiğin altında kaldı.\n" +
-                            "Minimum eşik: %" + AppSettings.getMinimumConfidence() + "\n" +
-                            "Algılanan güven: %" + simulatedConfidence
-            );
-
+        // Model henüz yüklenmedi mi?
+        if (!camMgr.isInitialized()) {
+            statusBadge.setText("⚙ Model yükleniyor...");
+            statusBadge.setStyle(styleLoading());
             return;
         }
-        confidenceValue.setText("%" + simulatedConfidence);
-        confidenceBar.setProgress(simulatedConfidence / 100.0);
 
-        lastDetectionText.setText(
-                selectedCamera.getLocation() + " kamerasında duman tespiti yapıldı.\n" +
-                        "Tespit zamanı: " + now + "\n" +
-                        "Bu kayıt sonraki aşamada veritabanına alarm olarak kaydedilecek."
-        );
+        // Kamera çalışıyor mu?
+        if (!camMgr.isCameraRunning(camera.getId())) {
+            statusBadge.setText("● BAĞLANIYOR");
+            statusBadge.setStyle(styleNormal());
+        }
 
-        cameraArea.setStyle(
-                "-fx-background-color: #1f2937;" +
-                        "-fx-background-radius: 16;" +
-                        "-fx-border-radius: 16;" +
-                        "-fx-border-color: #dc2626;" +
-                        "-fx-border-width: 4;"
-        );
+        // Frame listener
+        camMgr.setOnFrame(camera.getId(), img -> Platform.runLater(() -> {
+            cameraView.setImage(img);
+            statusBadge.setText("● CANLI");
+            statusBadge.setStyle(styleLive());
+        }));
 
-        Alarm alarm = new Alarm(
-                selectedCamera.getName(),
-                selectedCamera.getLocation(),
-                "Duman",
-                "Kritik",
-                simulatedConfidence / 100.0,
-                "Yeni",
-                now,
-                "Test alarmı"
-        );
+        // Detection listener
+        camMgr.setOnDetection(camera.getId(), dets -> Platform.runLater(() -> {
+            if (dets.isEmpty()) {
+                confidenceLabel.setText("%0");
+                confidenceBar.setProgress(0);
+                detectionTypeLabel.setText("—");
+                statusBadge.setText("● CANLI");
+                statusBadge.setStyle(styleLive());
+                return;
+            }
+            DetectionResult best = dets.stream()
+                    .max((a, b) -> Float.compare(a.getConfidence(), b.getConfidence())).orElse(null);
+            if (best == null) return;
+            int pct = best.getConfidencePct();
+            confidenceLabel.setText("%" + pct);
+            confidenceBar.setProgress(pct / 100.0);
+            detectionTypeLabel.setText(best.getClassName().toUpperCase() + " (" + dets.size() + " nesne)");
+            locationLabel.setText(camera.getLocation());
+            statusBadge.setText("⚠  YANGIN/DUMAN");
+            statusBadge.setStyle(styleDanger());
+        }));
 
-        new AlarmRepository().saveAlarm(alarm);
+        // FPS listener
+        camMgr.setOnFrame(camera.getId(), img -> Platform.runLater(() -> cameraView.setImage(img)));
+
+        // Son mevcut frame'i hemen göster
+        if (camMgr.getLatestFrame(camera.getId()) != null)
+            cameraView.setImage(camMgr.getLatestFrame(camera.getId()));
     }
 
-    private VBox createPanel(String title) {
-        VBox panel = new VBox(15);
+    // ── Detection paneli ──────────────────────────────────────────────────────
+
+    private VBox buildDetectionPanel() {
+        VBox panel = new VBox(16);
         panel.setPadding(new Insets(20));
-        panel.setStyle(
-                "-fx-background-color: white;" +
-                        "-fx-background-radius: 14;" +
-                        "-fx-border-radius: 14;" +
-                        "-fx-border-color: #e5e7eb;" +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 12, 0, 0, 4);"
+        panel.setStyle("-fx-background-color:#1e293b;-fx-background-radius:14;-fx-border-radius:14;-fx-border-color:#334155;");
+
+        Label t = new Label("Tespit Bilgisi");
+        t.setStyle("-fx-font-size:18px;-fx-font-weight:bold;-fx-text-fill:#f1f5f9;");
+
+        Label confTitle = new Label("Güven Oranı");
+        confTitle.setStyle("-fx-font-size:12px;-fx-text-fill:#64748b;");
+
+        confidenceLabel = new Label("%0");
+        confidenceLabel.setStyle("-fx-font-size:36px;-fx-font-weight:bold;-fx-text-fill:#f1f5f9;");
+
+        confidenceBar = new ProgressBar(0);
+        confidenceBar.setPrefWidth(260);
+        confidenceBar.setStyle("-fx-accent:#f97316;");
+
+        detectionTypeLabel = new Label("—");
+        locationLabel      = new Label("—");
+
+        panel.getChildren().addAll(t, confTitle, confidenceLabel, confidenceBar,
+                row("Tespit", detectionTypeLabel),
+                row("Konum",  locationLabel),
+                new Separator(),
+                note("Canlı İzleme ekranı CameraManager'dan mevcut\nstream'i okur. Ayrı bir bağlantı açılmaz.")
         );
-
-        Label titleLabel = new Label(title);
-        titleLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1f2937;");
-
-        panel.getChildren().add(titleLabel);
         return panel;
     }
 
-    private HBox createInfoRow(String title, String value) {
-        HBox row = new HBox(10);
-        row.setAlignment(Pos.CENTER_LEFT);
-
-        Label titleLabel = new Label(title + ":");
-        titleLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #6b7280; -fx-font-weight: bold;");
-
-        Label valueLabel = new Label(value);
-        valueLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #111827;");
-
-        row.getChildren().addAll(titleLabel, valueLabel);
-        return row;
+    private HBox row(String lbl, Label val) {
+        HBox r = new HBox(10); r.setAlignment(Pos.CENTER_LEFT);
+        Label l = new Label(lbl + ":"); l.setMinWidth(70);
+        l.setStyle("-fx-font-size:13px;-fx-text-fill:#64748b;-fx-font-weight:bold;");
+        val.setStyle("-fx-font-size:13px;-fx-text-fill:#e2e8f0;");
+        r.getChildren().addAll(l, val); return r;
     }
 
-    private String getNormalBadgeStyle() {
-        return "-fx-background-color: #dcfce7;" +
-                "-fx-text-fill: #166534;" +
-                "-fx-font-weight: bold;" +
-                "-fx-padding: 9 16;" +
-                "-fx-background-radius: 20;";
+    private Label note(String text) {
+        Label n = new Label(text);
+        n.setStyle("-fx-font-size:11px;-fx-text-fill:#475569;");
+        n.setWrapText(true); return n;
     }
 
-    private String getDangerBadgeStyle() {
-        return "-fx-background-color: #fee2e2;" +
-                "-fx-text-fill: #991b1b;" +
-                "-fx-font-weight: bold;" +
-                "-fx-padding: 9 16;" +
-                "-fx-background-radius: 20;";
-    }
+    private String styleNormal()  { return "-fx-background-color:#1e293b;-fx-text-fill:#94a3b8;-fx-font-weight:bold;-fx-padding:8 14;-fx-background-radius:20;"; }
+    private String styleLive()    { return "-fx-background-color:#052e16;-fx-text-fill:#22c55e;-fx-font-weight:bold;-fx-padding:8 14;-fx-background-radius:20;"; }
+    private String styleDanger()  { return "-fx-background-color:#450a0a;-fx-text-fill:#ef4444;-fx-font-weight:bold;-fx-padding:8 14;-fx-background-radius:20;"; }
+    private String styleLoading() { return "-fx-background-color:#422006;-fx-text-fill:#f59e0b;-fx-font-weight:bold;-fx-padding:8 14;-fx-background-radius:20;"; }
 }

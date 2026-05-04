@@ -45,8 +45,7 @@ public class MainLayout {
                 historyButton,
                 cameraButton,
                 settingsButton,
-                exitButton
-        );
+                exitButton);
 
         root.setLeft(sidebar);
         SceneManager.setMainLayout(root);
@@ -64,24 +63,21 @@ public class MainLayout {
                         "-fx-text-fill: white;" +
                         "-fx-font-size: 15px;" +
                         "-fx-alignment: center-left;" +
-                        "-fx-cursor: hand;"
-        );
+                        "-fx-cursor: hand;");
 
         button.setOnMouseEntered(e -> button.setStyle(
                 "-fx-background-color: #1f2937;" +
                         "-fx-text-fill: white;" +
                         "-fx-font-size: 15px;" +
                         "-fx-alignment: center-left;" +
-                        "-fx-cursor: hand;"
-        ));
+                        "-fx-cursor: hand;"));
 
         button.setOnMouseExited(e -> button.setStyle(
                 "-fx-background-color: transparent;" +
                         "-fx-text-fill: white;" +
                         "-fx-font-size: 15px;" +
                         "-fx-alignment: center-left;" +
-                        "-fx-cursor: hand;"
-        ));
+                        "-fx-cursor: hand;"));
 
         return button;
     }

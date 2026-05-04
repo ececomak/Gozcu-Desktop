@@ -16,7 +16,7 @@ public class SceneManager {
         if (mainLayout != null) {
             ScrollPane scrollPane = new ScrollPane(page);
             scrollPane.setFitToWidth(true);
-            scrollPane.setStyle("-fx-background-color: #f4f6f8; -fx-background: #f4f6f8;");
+            scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
             mainLayout.setCenter(scrollPane);
         }
     }

@@ -6,13 +6,14 @@ import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import com.gozcu.util.AppSettings;
+import com.gozcu.util.ThemeManager;
 
 public class SettingsView {
 
     public VBox getView() {
         VBox root = new VBox(22);
         root.setPadding(new Insets(30));
-        root.setStyle("-fx-background-color: #f4f6f8;");
+        root.setStyle("-fx-background-color: transparent;");
 
         Label title = new Label("Ayarlar");
         title.setStyle("-fx-font-size: 30px; -fx-font-weight: bold; -fx-text-fill: #1f2937;");
@@ -27,8 +28,7 @@ public class SettingsView {
                         "-fx-background-radius: 14;" +
                         "-fx-border-radius: 14;" +
                         "-fx-border-color: #e5e7eb;" +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 12, 0, 0, 4);"
-        );
+                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 12, 0, 0, 4);");
 
         Label cardTitle = new Label("Uygulama Ayarları");
         cardTitle.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: #111827;");
@@ -39,7 +39,8 @@ public class SettingsView {
         CheckBox soundCheckBox = new CheckBox("Alarm sesi aktif olsun");
         soundCheckBox.setSelected(AppSettings.isSoundEnabled());
 
-        Label thresholdLabel = new Label("Minimum güven eşiği: %" + AppSettings.getMinimumConfidence());        thresholdLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #374151;");
+        Label thresholdLabel = new Label("Minimum güven eşiği: %" + AppSettings.getMinimumConfidence());
+        thresholdLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #374151;");
 
         Slider thresholdSlider = new Slider(0, 100, AppSettings.getMinimumConfidence());
         thresholdSlider.setShowTickLabels(true);
@@ -73,19 +74,18 @@ public class SettingsView {
                         "-fx-font-weight: bold;" +
                         "-fx-padding: 10 18;" +
                         "-fx-background-radius: 10;" +
-                        "-fx-cursor: hand;"
-        );
+                        "-fx-cursor: hand;");
 
         saveButton.setOnAction(e -> {
             AppSettings.setNotificationsEnabled(notificationCheckBox.isSelected());
             AppSettings.setSoundEnabled(soundCheckBox.isSelected());
             AppSettings.setMinimumConfidence((int) thresholdSlider.getValue());
-            AppSettings.setTheme(themeComboBox.getValue());
+            ThemeManager.switchTheme(themeComboBox.getValue()); // tema anında değişir + kaydeder
 
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Ayarlar Kaydedildi");
             alert.setHeaderText(null);
-            alert.setContentText("Ayarlar başarıyla kaydedildi.");
+            alert.setContentText("Ayarlar kaydedildi. Tema değişikliği anlık uygulandı.");
             alert.showAndWait();
         });
 
@@ -96,8 +96,7 @@ public class SettingsView {
                 thresholdLabel,
                 thresholdSlider,
                 themeRow,
-                saveButton
-        );
+                saveButton);
 
         root.getChildren().addAll(title, description, card);
 
