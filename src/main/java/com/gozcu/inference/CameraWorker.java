@@ -25,8 +25,8 @@ import java.util.function.Consumer;
  */
 public class CameraWorker {
 
-    /** Her kaç frame'de bir inference yapılsın (FPS koruması) */
-    private static final int INFER_EVERY = 3;
+    /** Her kaç frame'de bir inference yapılsın (FPS koruması). 10 = saniyede ~3 kez inference */
+    private static final int INFER_EVERY = 10;
 
     private final SmokeDetector detector;
 

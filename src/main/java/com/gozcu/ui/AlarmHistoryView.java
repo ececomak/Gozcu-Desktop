@@ -12,6 +12,8 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.control.TableCell;
+import javafx.scene.control.TableRow;
 
 public class AlarmHistoryView {
 
@@ -92,6 +94,29 @@ public class AlarmHistoryView {
         statusColumn.setCellValueFactory(new PropertyValueFactory<>("status"));
         statusColumn.setPrefWidth(130);
 
+        TableColumn<Alarm, Void> actionColumn = new TableColumn<>("Aksiyon");
+        actionColumn.setPrefWidth(100);
+        actionColumn.setCellFactory(col -> new TableCell<>() {
+            private final Button btn = new Button("Detay →");
+            {
+                btn.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white; -fx-cursor: hand; -fx-padding: 4 10; -fx-background-radius: 4;");
+                btn.setOnAction(e -> {
+                    Alarm alarm = getTableView().getItems().get(getIndex());
+                    SceneManager.showPage(new AlarmDetailView(alarm).getView());
+                });
+            }
+
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    setGraphic(btn);
+                }
+            }
+        });
+
         tableView.getColumns().addAll(
                 idColumn,
                 timeColumn,
@@ -100,8 +125,24 @@ public class AlarmHistoryView {
                 typeColumn,
                 levelColumn,
                 confidenceColumn,
-                statusColumn
+                statusColumn,
+                actionColumn
         );
+
+        // Kritik alarmları vurgulamak için RowFactory
+        tableView.setRowFactory(tv -> new TableRow<>() {
+            @Override
+            protected void updateItem(Alarm item, boolean empty) {
+                super.updateItem(item, empty);
+                if (item == null || empty) {
+                    setStyle("");
+                } else if ("Kritik".equals(item.getLevel())) {
+                    setStyle("-fx-background-color: #450a0a;"); // Koyu kırmızımsı arka plan
+                } else {
+                    setStyle("");
+                }
+            }
+        });
 
         ObservableList<Alarm> alarmList = FXCollections.observableArrayList(
                 alarmRepository.findAllAlarms()

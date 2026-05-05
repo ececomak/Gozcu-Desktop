@@ -36,6 +36,9 @@ public class SmokeDetector implements AutoCloseable {
         env = OrtEnvironment.getEnvironment();
         OrtSession.SessionOptions opts = new OrtSession.SessionOptions();
         opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);
+        // Çoklu kamera kullanımında CPU kitlenmesini önlemek için thread sayısını sınırla
+        opts.setIntraOpNumThreads(1);
+        opts.setInterOpNumThreads(1);
         session   = env.createSession(modelPath, opts);
         inputName = session.getInputNames().iterator().next();
         System.out.printf("Model yüklendi  input=%s  sınıf=%d%n", inputName, classNames.length);
@@ -43,7 +46,7 @@ public class SmokeDetector implements AutoCloseable {
 
     // ── Ana metod ────────────────────────────────────────────────────────────
 
-    public List<DetectionResult> detect(BufferedImage frame, float confThreshold) throws OrtException {
+    public synchronized List<DetectionResult> detect(BufferedImage frame, float confThreshold) throws OrtException {
         int origW = frame.getWidth(), origH = frame.getHeight();
 
         // 1. Letterbox → 640×640

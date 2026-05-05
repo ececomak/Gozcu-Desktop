@@ -61,19 +61,34 @@ public class MainApp extends Application {
         try {
             List<Webcam> systemCams = Webcam.getWebcams();
             CameraRepository repo   = new CameraRepository();
+            
+            // Sistemde sanal olan kameraların indexlerini (source) bul
+            Set<String> virtualSources = new java.util.HashSet<>();
+            for (int i = 0; i < systemCams.size(); i++) {
+                String camName = systemCams.get(i).getName().toLowerCase();
+                if (camName.contains("virtual") || camName.contains("obs") ||
+                    camName.contains("manycam") || camName.contains("droidcam")) {
+                    virtualSources.add(String.valueOf(i));
+                    System.out.println("Sanal kamera atlandı: " + systemCams.get(i).getName());
+                }
+            }
+            
+            // Veritabanındaki kameraları kontrol et, source'u sanal olanları sil
+            for (Camera c : repo.findAllCameras()) {
+                if (virtualSources.contains(c.getSource())) {
+                    repo.deleteCamera(c.getId());
+                    System.out.println("Sanal kamera (source=" + c.getSource() + ") veritabanından silindi.");
+                }
+            }
+
             Set<String> dbSources   = new java.util.HashSet<>();
             repo.findAllCameras().forEach(c -> dbSources.add(c.getSource()));
 
             int addedCount = 0;
             for (int i = 0; i < systemCams.size(); i++) {
-                String camName = systemCams.get(i).getName().toLowerCase();
-                // Sanal kameraları atla (OBS, ManyCam, DroidCam vb.)
-                if (camName.contains("virtual") || camName.contains("obs") ||
-                    camName.contains("manycam") || camName.contains("droidcam")) {
-                    System.out.println("Sanal kamera atlandı: " + systemCams.get(i).getName());
-                    continue;
-                }
                 String src = String.valueOf(i);
+                if (virtualSources.contains(src)) continue; // Sanalsa geç
+                
                 if (!dbSources.contains(src)) {
                     String label = addedCount == 0 ? "Dahili Kamera" : "Harici Kamera " + addedCount;
                     repo.saveCamera(new Camera(label, "Otomatik Keşif", src, "Aktif", 60));

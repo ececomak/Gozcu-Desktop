@@ -64,6 +64,36 @@ public class DatabaseManager {
             // source sütununda UNIQUE index — mükerrer webcam kaydını engeller
             s.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_cameras_source ON cameras(source);");
 
+            // Yeni sütunlar (varsa hata vermez çünkü try-catch ile eklenebilir veya SQLite ALTER kullanımı)
+            try { s.execute("ALTER TABLE alarms ADD COLUMN acknowledged_by TEXT;"); } catch (SQLException ignored) {}
+            try { s.execute("ALTER TABLE alarms ADD COLUMN acknowledged_at TEXT;"); } catch (SQLException ignored) {}
+            try { s.execute("ALTER TABLE alarms ADD COLUMN cap_message_id TEXT;"); } catch (SQLException ignored) {}
+
+            s.execute("""
+                CREATE TABLE IF NOT EXISTS alarm_state_log (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alarm_id    INTEGER NOT NULL REFERENCES alarms(id) ON DELETE CASCADE,
+                    from_status TEXT    NOT NULL,
+                    to_status   TEXT    NOT NULL,
+                    changed_by  TEXT    NOT NULL,
+                    changed_at  TEXT    NOT NULL,
+                    reason      TEXT
+                );
+            """);
+
+            s.execute("""
+                CREATE TABLE IF NOT EXISTS notification_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alarm_id        INTEGER NOT NULL REFERENCES alarms(id) ON DELETE SET NULL,
+                    channel         TEXT    NOT NULL,
+                    recipient       TEXT    NOT NULL,
+                    message_preview TEXT,
+                    sent_at         TEXT    NOT NULL,
+                    success         INTEGER NOT NULL DEFAULT 1,
+                    error_detail    TEXT
+                );
+            """);
+
             System.out.println("Veritabanı hazır.");
 
         } catch (SQLException e) {

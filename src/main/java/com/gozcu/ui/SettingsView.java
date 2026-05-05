@@ -61,11 +61,17 @@ public class SettingsView {
 
         HBox themeRow = new HBox(12);
         themeRow.setAlignment(Pos.CENTER_LEFT);
-
         Label themeLabel = new Label("Tema:");
         themeLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #374151;");
-
         themeRow.getChildren().addAll(themeLabel, themeComboBox);
+
+        HBox operatorRow = new HBox(12);
+        operatorRow.setAlignment(Pos.CENTER_LEFT);
+        Label operatorLabel = new Label("Operatör Adı:");
+        operatorLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #374151;");
+        TextField operatorField = new TextField(AppSettings.getOperatorName());
+        operatorField.setPrefWidth(200);
+        operatorRow.getChildren().addAll(operatorLabel, operatorField);
 
         Button saveButton = new Button("Ayarları Kaydet");
         saveButton.setStyle(
@@ -80,6 +86,7 @@ public class SettingsView {
             AppSettings.setNotificationsEnabled(notificationCheckBox.isSelected());
             AppSettings.setSoundEnabled(soundCheckBox.isSelected());
             AppSettings.setMinimumConfidence((int) thresholdSlider.getValue());
+            AppSettings.setOperatorName(operatorField.getText());
             ThemeManager.switchTheme(themeComboBox.getValue()); // tema anında değişir + kaydeder
 
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -96,6 +103,7 @@ public class SettingsView {
                 thresholdLabel,
                 thresholdSlider,
                 themeRow,
+                operatorRow,
                 saveButton);
 
         root.getChildren().addAll(title, description, card);

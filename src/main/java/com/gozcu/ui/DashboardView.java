@@ -16,6 +16,8 @@ import javafx.scene.paint.Color;
 import javafx.util.Duration;
 
 import java.util.*;
+import com.gozcu.util.AlertSoundPlayer;
+import com.gozcu.util.SceneManager;
 
 public class DashboardView {
 
@@ -36,10 +38,14 @@ public class DashboardView {
 
     private VBox    root;
     private StackPane focusOverlay;
+    private StackPane detailOverlay;
     private Timeline statsTimer;
 
     // Focused camera (büyük görünüm)
     private int focusedCamId = -1;
+    
+    // Son algılama zamanı (hücre kırmızılığını yönetmek için)
+    private final Map<Integer, Long> lastDetectionMs = new HashMap<>();
 
     public VBox getView() {
         root = new VBox(0);
@@ -94,17 +100,24 @@ public class DashboardView {
         focusOverlay = buildFocusOverlay();
         focusOverlay.setVisible(false);
 
-        StackPane rootStack = new StackPane(root, focusOverlay);
+        // Detail overlay (alarm onaylama/müdahale)
+        detailOverlay = new StackPane();
+        detailOverlay.setStyle("-fx-background-color: rgba(0,0,0,0.85);");
+        detailOverlay.setVisible(false);
+        detailOverlay.setOnMouseClicked(e -> { if (e.getTarget() == detailOverlay) closeDetailOverlay(); });
+
+        StackPane rootStack = new StackPane(root, focusOverlay, detailOverlay);
         VBox wrapper = new VBox(rootStack);
         VBox.setVgrow(rootStack, Priority.ALWAYS);
 
         root.getChildren().addAll(header, mainContent);
 
-        // Global alarm listener → hücre kırmızıya döner + auto-focus
+        // Global alarm listener → hücre kırmızıya döner + loga eklenir
         camMgr.setOnAlarm((camId, dets) -> Platform.runLater(() -> {
+            lastDetectionMs.put(camId, System.currentTimeMillis());
             flashCell(camId);
             saveAutoAlarm(camId, dets);
-            if (focusedCamId == -1) openFocus(camId); // ilk alarm odakla
+            // Otomatik odaklanmayı kaldırdık, UI'ı bloke etmesin.
         }));
 
         // Stats timer
@@ -203,8 +216,14 @@ public class DashboardView {
                 Platform.runLater(() -> {
                     iv.setImage(img);
                     if (badge != null) {
-                        badge.setText("● CANLI");
-                        badge.setStyle("-fx-text-fill: #22c55e; -fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 4 10;");
+                        // Eğer hücre alarm durumundaysa "CANLI" yazıp kırmızı çerçeveyi/yazıyı bozma
+                        long lastDet = lastDetectionMs.getOrDefault(id, 0L);
+                        if (lastDet == 0 || System.currentTimeMillis() - lastDet > 5000) {
+                            if (!"● CANLI".equals(badge.getText())) {
+                                badge.setText("● CANLI");
+                                badge.setStyle("-fx-text-fill: #22c55e; -fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 4 10;");
+                            }
+                        }
                     }
                     // placeholder'ı kaldır
                     StackPane pane = (StackPane) iv.getParent();
@@ -385,11 +404,56 @@ public class DashboardView {
             Label info = new Label(a.getCameraName() + "\n" + a.getAlarmType());
             info.setStyle("-fx-text-fill:#e2e8f0;-fx-font-size:12px;");
             VBox.setVgrow(info, Priority.ALWAYS);
+            
+            VBox badgeBox = new VBox(4);
+            badgeBox.setAlignment(Pos.CENTER_RIGHT);
             Label lvl = new Label(a.getLevel()); lvl.setStyle(levelStyle(a.getLevel()));
+            
+            Button detailBtn = new Button("Müdahale Et →");
+            detailBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #3b82f6; -fx-font-weight: bold; -fx-font-size: 11px; -fx-cursor: hand; -fx-padding: 0;");
+            detailBtn.setOnAction(e -> {
+                AlertSoundPlayer.getInstance().stop(); // Tıklandığı an sesi sustur
+                showDetailOverlay(a);
+            });
+            
+            badgeBox.getChildren().addAll(lvl, detailBtn);
 
-            row.getChildren().addAll(t, info, lvl);
+            row.getChildren().addAll(t, info, badgeBox);
+            HBox.setHgrow(info, Priority.ALWAYS);
             alarmListBox.getChildren().add(row);
         });
+        
+        // 5 saniyeden uzun süredir algılama olmayan kameraları normale döndür
+        long now = System.currentTimeMillis();
+        for (Map.Entry<Integer, VBox> entry : cellBoxes.entrySet()) {
+            int camId = entry.getKey();
+            if (lastDetectionMs.getOrDefault(camId, 0L) > 0 && now - lastDetectionMs.get(camId) > 5000) {
+                lastDetectionMs.put(camId, 0L);
+                entry.getValue().setStyle("-fx-background-color:#1e293b;-fx-border-color:#334155;-fx-border-width:1;");
+                Label badge = cellBadges.get(camId);
+                if (badge != null && badge.getText().equals("⚠ ALARM")) {
+                    badge.setText("● CANLI"); 
+                    badge.setStyle("-fx-text-fill:#22c55e;-fx-font-size:12px;-fx-font-weight:bold;-fx-padding:4 10;");
+                }
+            }
+        }
+    }
+
+    private void showDetailOverlay(Alarm a) {
+        VBox detailView = new AlarmDetailView(a, this::closeDetailOverlay).getView();
+        detailView.setMaxWidth(600);
+        detailView.setMaxHeight(600);
+        // Arka planı şeffaf yapıp kartın kendi tasarımını kullanacağız
+        detailView.setStyle("-fx-background-color: transparent;"); 
+        
+        detailOverlay.getChildren().clear();
+        detailOverlay.getChildren().add(detailView);
+        detailOverlay.setVisible(true);
+    }
+
+    private void closeDetailOverlay() {
+        detailOverlay.setVisible(false);
+        refreshStats(); // Listeyi güncelle
     }
 
     // ── Yardımcılar ──────────────────────────────────────────────────────────
@@ -401,12 +465,9 @@ public class DashboardView {
 
         badge.setText("⚠ ALARM"); badge.setStyle("-fx-text-fill:#ef4444;-fx-font-size:12px;-fx-font-weight:bold;-fx-padding:4 10;");
         cell.setStyle("-fx-background-color:#1e293b;-fx-border-color:#ef4444;-fx-border-width:2;");
-
-        // 5sn sonra normale dön
-        new Timeline(new KeyFrame(Duration.seconds(5), e -> {
-            cell.setStyle("-fx-background-color:#1e293b;-fx-border-color:#334155;-fx-border-width:1;");
-            badge.setText("● CANLI"); badge.setStyle("-fx-text-fill:#22c55e;-fx-font-size:12px;-fx-font-weight:bold;-fx-padding:4 10;");
-        })).play();
+        
+        // Timeline kaldırıldı; artık kırmızılık refreshStats() içinde 
+        // lastDetectionMs kontrol edilerek normale döndürülüyor.
     }
 
     private long lastAlarmSaveMs = 0;
@@ -422,6 +483,11 @@ public class DashboardView {
             String level = pct >= 80 ? "Kritik" : pct >= 50 ? "Orta" : "Düşük";
             String time  = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"));
             almRepo.saveAlarm(new Alarm(cam.getName(), cam.getLocation(), best.getClassName(), level, best.getConfidence(), "Yeni", time, "Otomatik tespit"));
+            
+            // Eğer uyarı sesleri açıksa ve seviye Kritik/Orta ise alarm çal (NFPA 72 §18.4.4)
+            if ("Kritik".equals(level) || "Orta".equals(level)) {
+                AlertSoundPlayer.getInstance().playFireAlarm();
+            }
         });
     }
 
