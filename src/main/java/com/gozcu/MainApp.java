@@ -104,7 +104,7 @@ public class MainApp extends Application {
 
     // ── Model yolu ────────────────────────────────────────────────────────────
 
-    static String resolveModelPath() throws Exception {
+    public static String resolveModelPath() throws Exception {
         URL url = MainApp.class.getResource(MODEL_RESOURCE);
         if (url != null && url.getProtocol().equals("file"))
             return Paths.get(url.toURI()).toString();

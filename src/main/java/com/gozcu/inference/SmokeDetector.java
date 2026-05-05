@@ -31,22 +31,26 @@ public class SmokeDetector implements AutoCloseable {
             new Color(37, 99, 235),  // diğer → mavi
     };
 
+    private volatile boolean closed = false;
+
     public SmokeDetector(String modelPath, String[] classNames) throws OrtException {
         this.classNames = classNames;
         env = OrtEnvironment.getEnvironment();
         OrtSession.SessionOptions opts = new OrtSession.SessionOptions();
         opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);
-        // Çoklu kamera kullanımında CPU kitlenmesini önlemek için thread sayısını sınırla
-        opts.setIntraOpNumThreads(1);
-        opts.setInterOpNumThreads(1);
+        // YOLOv10x çok büyük bir model, daha fazla thread İngiltere performansı artırır
+        int cpus = Runtime.getRuntime().availableProcessors();
+        opts.setIntraOpNumThreads(Math.min(8, cpus));
+        opts.setInterOpNumThreads(Math.min(2, cpus / 2));
         session   = env.createSession(modelPath, opts);
         inputName = session.getInputNames().iterator().next();
-        System.out.printf("Model yüklendi  input=%s  sınıf=%d%n", inputName, classNames.length);
+        System.out.printf("Model yüklendi  input=%s  sınıf=%d  threads=%d%n", inputName, classNames.length, Math.min(8, cpus));
     }
 
     // ── Ana metod ────────────────────────────────────────────────────────────
 
     public synchronized List<DetectionResult> detect(BufferedImage frame, float confThreshold) throws OrtException {
+        if (closed) return Collections.emptyList();  // Kapalı session'a erişimi önle
         int origW = frame.getWidth(), origH = frame.getHeight();
 
         // 1. Letterbox → 640×640
@@ -71,9 +75,9 @@ public class SmokeDetector implements AutoCloseable {
         float[][][] raw = (float[][][]) result.get(0).getValue();
         result.close();
 
-        // 4. output[1][nc+4][8400] parse
-        int numAnchors = raw[0][0].length;
-        int numClasses  = classNames.length;
+        // 4. YOLOv8 output parse: [1, 4+nc, 8400] → (cx,cy,w,h, cls0, cls1...)
+        int numAnchors = raw[0][0].length;   // 8400
+        int numClasses = classNames.length;
         List<float[]> candidates = new ArrayList<>();
 
         for (int a = 0; a < numAnchors; a++) {
@@ -184,7 +188,8 @@ public class SmokeDetector implements AutoCloseable {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
+        closed = true;
         try { if (session != null) session.close(); } catch (OrtException ignored) {}
         if (env != null) env.close();
     }

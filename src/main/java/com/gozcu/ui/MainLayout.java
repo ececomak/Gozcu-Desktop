@@ -24,14 +24,16 @@ public class MainLayout {
         subtitle.setStyle("-fx-text-fill: #9ca3af; -fx-font-size: 13px;");
 
         Button dashboardButton = createMenuButton("Dashboard");
-        Button liveButton = createMenuButton("Canlı İzleme");
-        Button historyButton = createMenuButton("Alarm Geçmişi");
-        Button cameraButton = createMenuButton("Kameralar");
+        Button liveButton     = createMenuButton("Canlı İzleme");
+        Button videoTestButton= createMenuButton("Video Testi");
+        Button historyButton  = createMenuButton("Alarm Geçmişi");
+        Button cameraButton   = createMenuButton("Kameralar");
         Button settingsButton = createMenuButton("Ayarlar");
-        Button exitButton = createMenuButton("Çıkış");
+        Button exitButton     = createMenuButton("Çıkış");
 
         dashboardButton.setOnAction(e -> SceneManager.showPage(new DashboardView().getView()));
         liveButton.setOnAction(e -> SceneManager.showPage(new LiveMonitorView().getView()));
+        videoTestButton.setOnAction(e -> SceneManager.showPage(new VideoTestView().getView()));
         historyButton.setOnAction(e -> SceneManager.showPage(new AlarmHistoryView().getView()));
         cameraButton.setOnAction(e -> SceneManager.showPage(new CameraView().getView()));
         settingsButton.setOnAction(e -> SceneManager.showPage(new SettingsView().getView()));
@@ -42,6 +44,7 @@ public class MainLayout {
                 subtitle,
                 dashboardButton,
                 liveButton,
+                videoTestButton,
                 historyButton,
                 cameraButton,
                 settingsButton,

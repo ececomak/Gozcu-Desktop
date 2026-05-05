@@ -25,7 +25,11 @@ import java.util.function.Consumer;
  */
 public class CameraWorker {
 
-    /** Her kaç frame'de bir inference yapılsın (FPS koruması). 10 = saniyede ~3 kez inference */
+    /**
+     * Her kaç frame'de bir inference yapılsın.
+     * YOLOv8n ~36ms/inference CPU'da.
+     * 30fps kamera * 10 frame = saniyede ~3 kez inference → gerçek zamanlı algılama.
+     */
     private static final int INFER_EVERY = 10;
 
     private final SmokeDetector detector;
@@ -88,7 +92,8 @@ public class CameraWorker {
             if (webcam == null) throw new RuntimeException("Kamera açılamadı: " + source);
 
             int frameIdx = 0;
-            List<DetectionResult> lastDets = Collections.emptyList();
+            java.util.concurrent.atomic.AtomicReference<List<DetectionResult>> lastDetsRef = new java.util.concurrent.atomic.AtomicReference<>(Collections.emptyList());
+            AtomicBoolean inferring = new AtomicBoolean(false);
 
             long fpsTimestamp = System.currentTimeMillis();
             int  fpsCnt       = 0;
@@ -100,22 +105,36 @@ public class CameraWorker {
                 frameIdx++;
                 fpsCnt++;
 
-                // Inference — her INFER_EVERY frame'de bir
-                if (frameIdx % INFER_EVERY == 0) {
-                    try {
-                        lastDets = detector.detect(raw, confThreshold);
-                    } catch (Exception ex) {
-                        System.err.println("Inference hata: " + ex.getMessage());
-                        lastDets = Collections.emptyList();
-                    }
+                // Inference — her INFER_EVERY frame'de bir ve eğer önceki işlem bitmişse
+                if (frameIdx % INFER_EVERY == 0 && inferring.compareAndSet(false, true)) {
+                    final float currentConf = confThreshold;
+                    
+                    // Derin kopya (Deep copy) oluştur - Asenkron thread işlerken kamera kareyi bozmasın
+                    java.awt.image.ColorModel cm = raw.getColorModel();
+                    boolean isAlphaPremultiplied = cm.isAlphaPremultiplied();
+                    java.awt.image.WritableRaster raster = raw.copyData(null);
+                    final BufferedImage inferFrame = new BufferedImage(cm, raster, isAlphaPremultiplied, null);
+
+                    java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return detector.detect(inferFrame, currentConf);
+                        } catch (Exception ex) {
+                            System.err.println("Inference hata: " + ex.getMessage());
+                            return Collections.<DetectionResult>emptyList();
+                        }
+                    }).thenAccept(dets -> {
+                        lastDetsRef.set(dets);
+                        inferring.set(false);
+                    });
                 }
 
+                List<DetectionResult> currentDets = lastDetsRef.get();
                 // Bounding box'ları frame üzerine çiz
-                BufferedImage annotated = detector.annotate(raw, lastDets);
+                BufferedImage annotated = detector.annotate(raw, currentDets);
 
                 // JavaFX Image'e çevir ve UI'ya gönder
                 Image fxImg = toFXImage(annotated);
-                List<DetectionResult> detsSnap = lastDets;
+                List<DetectionResult> detsSnap = currentDets;
 
                 Platform.runLater(() -> {
                     if (onFrame     != null) onFrame.accept(fxImg);
