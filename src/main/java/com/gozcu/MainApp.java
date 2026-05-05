@@ -11,6 +11,7 @@ import com.gozcu.util.ThemeManager;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import com.gozcu.ui.LoginView;
 
 import java.io.InputStream;
 import java.net.URL;
@@ -30,11 +31,11 @@ public class MainApp extends Application {
         // Sistem kameralarını DB ile eşitle (yeni kameraları otomatik ekle)
         autoDetectWebcams();
 
-        MainLayout layout = new MainLayout();
-        Scene scene = new Scene(layout.getLayout(), 1200, 750);
-        ThemeManager.register(scene); // CSS temayı uygula
+        // İlk olarak Login ekranını göster
+        LoginView loginView = new LoginView(stage);
+        loginView.show();
+        
         stage.setTitle("Gözcü Desktop");
-        stage.setScene(scene);
         stage.setMinWidth(1100);
         stage.setMinHeight(700);
         stage.show();

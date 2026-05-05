@@ -61,6 +61,26 @@ public class DatabaseManager {
                 );
             """);
 
+            s.execute("""
+                CREATE TABLE IF NOT EXISTS operators (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name          TEXT    NOT NULL,
+                    employee_id   TEXT    NOT NULL UNIQUE,
+                    password_hash TEXT    NOT NULL,
+                    role          TEXT    NOT NULL DEFAULT 'Operator',
+                    created_at    TEXT    NOT NULL
+                );
+            """);
+
+            // Varsayılan Admin Hesabı Ekle (Sadece tablo boşsa)
+            try (ResultSet rs = s.executeQuery("SELECT count(*) FROM operators")) {
+                if (rs.next() && rs.getInt(1) == 0) {
+                    // employee_id: 1234, pass: 1234
+                    s.execute("INSERT INTO operators (name, employee_id, password_hash, role, created_at) " +
+                              "VALUES ('Sistem Yöneticisi', '1234', '1234', 'Admin', datetime('now','localtime'))");
+                }
+            }
+
             // source sütununda UNIQUE index — mükerrer webcam kaydını engeller
             s.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_cameras_source ON cameras(source);");
 

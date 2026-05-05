@@ -345,8 +345,11 @@ public class DashboardView {
 
         // İstatistik kartları
         activeCamLabel   = statLabel("0");
+        activeCamLabel.setId("activeCamLabel");
         todayAlarmLabel  = statLabel("0");
+        todayAlarmLabel.setId("todayAlarmLabel");
         criticalAlarmLabel = statLabel("0");
+        criticalAlarmLabel.setId("criticalAlarmLabel");
 
         VBox stats = new VBox(2,
                 statCard("Aktif Kamera",  activeCamLabel),

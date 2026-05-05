@@ -3,8 +3,8 @@ package com.gozcu.controller;
 import com.gozcu.model.Alarm;
 import com.gozcu.repository.AlarmRepository;
 import com.gozcu.util.AlertSoundPlayer;
-import com.gozcu.util.AppSettings;
 import com.gozcu.util.DatabaseManager;
+import com.gozcu.util.SessionManager;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -37,7 +37,8 @@ public class AlarmController {
      * Alarmı onaylar. (NFPA 72 §26.6.3.3.a)
      */
     public void acknowledgeAlarm(Alarm alarm, String note) {
-        String operator = AppSettings.getOperatorName();
+        String operator = SessionManager.isLoggedIn() ? 
+                SessionManager.getCurrentOperator().getName() + " (Sicil: " + SessionManager.getCurrentOperator().getEmployeeId() + ")" : "Bilinmeyen Operatör";
         String now = LocalDateTime.now().format(DISPLAY_FMT);
 
         updateStatusAndLog(alarm, "Onaylandı", note, operator, now);
@@ -49,7 +50,8 @@ public class AlarmController {
      * Alarmı reddeder / yanlış alarm olarak işaretler. (NFPA 72 §26.6.3.3.b)
      */
     public void rejectAlarm(Alarm alarm, String note) {
-        String operator = AppSettings.getOperatorName();
+        String operator = SessionManager.isLoggedIn() ? 
+                SessionManager.getCurrentOperator().getName() + " (Sicil: " + SessionManager.getCurrentOperator().getEmployeeId() + ")" : "Bilinmeyen Operatör";
         String now = LocalDateTime.now().format(DISPLAY_FMT);
         String finalNote = (note == null || note.trim().isEmpty()) ? "Yanlış alarm" : note;
 

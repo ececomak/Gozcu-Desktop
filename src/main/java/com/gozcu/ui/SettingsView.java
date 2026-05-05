@@ -1,113 +1,238 @@
 package com.gozcu.ui;
 
+import com.gozcu.model.Operator;
+import com.gozcu.repository.OperatorRepository;
+import com.gozcu.util.AppSettings;
+import com.gozcu.util.SessionManager;
+import com.gozcu.util.ThemeManager;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
-import com.gozcu.util.AppSettings;
-import com.gozcu.util.ThemeManager;
 
 public class SettingsView {
 
+    private final OperatorRepository operatorRepo = new OperatorRepository();
+
     public VBox getView() {
-        VBox root = new VBox(22);
+        VBox root = new VBox(20);
         root.setPadding(new Insets(30));
         root.setStyle("-fx-background-color: transparent;");
 
-        Label title = new Label("Ayarlar");
+        HBox header = new HBox(20);
+        header.setAlignment(Pos.CENTER_LEFT);
+        
+        VBox titleBox = new VBox(5);
+        Label title = new Label("Sistem Ayarları");
         title.setStyle("-fx-font-size: 30px; -fx-font-weight: bold; -fx-text-fill: #1f2937;");
+        Label subtitle = new Label("NFPA 72 Uyumluluk ve Operatör Yönetimi");
+        subtitle.setStyle("-fx-font-size: 14px; -fx-text-fill: #64748b;");
+        titleBox.getChildren().addAll(title, subtitle);
 
-        Label description = new Label("Bildirim, alarm sesi ve algılama eşiği ayarları burada yönetilir.");
-        description.setStyle("-fx-font-size: 16px; -fx-text-fill: #4b5563;");
+        header.getChildren().add(titleBox);
 
-        VBox card = new VBox(18);
-        card.setPadding(new Insets(25));
-        card.setStyle(
-                "-fx-background-color: white;" +
-                        "-fx-background-radius: 14;" +
-                        "-fx-border-radius: 14;" +
-                        "-fx-border-color: #e5e7eb;" +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 12, 0, 0, 4);");
+        TabPane tabPane = new TabPane();
+        tabPane.setId("settingsTabPane");
+        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        tabPane.setStyle("-fx-background-color: transparent;");
+        VBox.setVgrow(tabPane, Priority.ALWAYS);
 
-        Label cardTitle = new Label("Uygulama Ayarları");
-        cardTitle.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: #111827;");
+        tabPane.getTabs().addAll(
+                createSystemTab(),
+                createNotificationTab(),
+                createOperatorTab()
+        );
 
-        CheckBox notificationCheckBox = new CheckBox("Duman tespiti olduğunda bildirim göster");
-        notificationCheckBox.setSelected(AppSettings.isNotificationsEnabled());
+        root.getChildren().addAll(header, tabPane);
+        return root;
+    }
 
-        CheckBox soundCheckBox = new CheckBox("Alarm sesi aktif olsun");
-        soundCheckBox.setSelected(AppSettings.isSoundEnabled());
+    // ── 1. Sistem ve Eşik Ayarları ──────────────────────────────────────────
 
-        Label thresholdLabel = new Label("Minimum güven eşiği: %" + AppSettings.getMinimumConfidence());
-        thresholdLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #374151;");
+    private Tab createSystemTab() {
+        Tab tab = new Tab("🎛 Sistem ve Sensörler");
+        
+        VBox content = new VBox(25);
+        content.setPadding(new Insets(25));
+        content.setStyle("-fx-background-color: #1e293b; -fx-background-radius: 0 8 8 8;");
+
+        Label sectionTitle = new Label("Sensör Eşik Değerleri");
+        sectionTitle.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: white;");
+
+        Label thresholdLabel = new Label("Yapay Zeka Güven Eşiği: %" + AppSettings.getMinimumConfidence());
+        thresholdLabel.setStyle("-fx-text-fill: #cbd5e1;");
 
         Slider thresholdSlider = new Slider(0, 100, AppSettings.getMinimumConfidence());
+        thresholdSlider.setId("thresholdSlider");
         thresholdSlider.setShowTickLabels(true);
         thresholdSlider.setShowTickMarks(true);
         thresholdSlider.setMajorTickUnit(20);
         thresholdSlider.setBlockIncrement(5);
-        thresholdSlider.setPrefWidth(350);
-
-        thresholdSlider.valueProperty().addListener((observable, oldValue, newValue) -> {
-            int value = newValue.intValue();
-            thresholdLabel.setText("Minimum güven eşiği: %" + value);
+        thresholdSlider.setPrefWidth(400);
+        
+        thresholdSlider.valueProperty().addListener((obs, oldV, newV) -> {
+            thresholdLabel.setText("Yapay Zeka Güven Eşiği: %" + newV.intValue());
         });
 
-        ComboBox<String> themeComboBox = new ComboBox<>();
-        themeComboBox.getItems().addAll("Açık Tema", "Koyu Tema");
-        themeComboBox.setValue(AppSettings.getTheme());
-        themeComboBox.setPrefWidth(180);
+        Label themeLabel = new Label("Arayüz Teması:");
+        themeLabel.setStyle("-fx-text-fill: #cbd5e1;");
+        ComboBox<String> themeBox = new ComboBox<>();
+        themeBox.setId("themeBox");
+        themeBox.getItems().addAll("Açık Tema", "Koyu Tema");
+        themeBox.setValue(AppSettings.getTheme());
 
-        HBox themeRow = new HBox(12);
-        themeRow.setAlignment(Pos.CENTER_LEFT);
-        Label themeLabel = new Label("Tema:");
-        themeLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #374151;");
-        themeRow.getChildren().addAll(themeLabel, themeComboBox);
-
-        HBox operatorRow = new HBox(12);
-        operatorRow.setAlignment(Pos.CENTER_LEFT);
-        Label operatorLabel = new Label("Operatör Adı:");
-        operatorLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #374151;");
-        TextField operatorField = new TextField(AppSettings.getOperatorName());
-        operatorField.setPrefWidth(200);
-        operatorRow.getChildren().addAll(operatorLabel, operatorField);
-
-        Button saveButton = new Button("Ayarları Kaydet");
-        saveButton.setStyle(
-                "-fx-background-color: #111827;" +
-                        "-fx-text-fill: white;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-padding: 10 18;" +
-                        "-fx-background-radius: 10;" +
-                        "-fx-cursor: hand;");
-
-        saveButton.setOnAction(e -> {
-            AppSettings.setNotificationsEnabled(notificationCheckBox.isSelected());
-            AppSettings.setSoundEnabled(soundCheckBox.isSelected());
+        Button saveBtn = new Button("Sistem Ayarlarını Kaydet");
+        saveBtn.setId("saveSystemBtn");
+        saveBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 20; -fx-background-radius: 6;");
+        saveBtn.setOnAction(e -> {
             AppSettings.setMinimumConfidence((int) thresholdSlider.getValue());
-            AppSettings.setOperatorName(operatorField.getText());
-            ThemeManager.switchTheme(themeComboBox.getValue()); // tema anında değişir + kaydeder
-
-            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-            alert.setTitle("Ayarlar Kaydedildi");
-            alert.setHeaderText(null);
-            alert.setContentText("Ayarlar kaydedildi. Tema değişikliği anlık uygulandı.");
-            alert.showAndWait();
+            AppSettings.setTheme(themeBox.getValue());
+            AppSettings.save();
+            ThemeManager.switchTheme(themeBox.getValue());
+            showAlert("Başarılı", "Sistem ayarları kaydedildi.");
         });
 
-        card.getChildren().addAll(
-                cardTitle,
-                notificationCheckBox,
-                soundCheckBox,
-                thresholdLabel,
-                thresholdSlider,
-                themeRow,
-                operatorRow,
-                saveButton);
+        content.getChildren().addAll(sectionTitle, thresholdLabel, thresholdSlider, themeLabel, themeBox, saveBtn);
+        tab.setContent(content);
+        return tab;
+    }
 
-        root.getChildren().addAll(title, description, card);
+    // ── 2. Ses ve Bildirim Ayarları ─────────────────────────────────────────
 
-        return root;
+    private Tab createNotificationTab() {
+        Tab tab = new Tab("🔊 Ses ve Bildirimler");
+        
+        VBox content = new VBox(25);
+        content.setPadding(new Insets(25));
+        content.setStyle("-fx-background-color: #1e293b; -fx-background-radius: 0 8 8 8;");
+
+        Label sectionTitle = new Label("NFPA 72 Uyarı Bildirimleri");
+        sectionTitle.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: white;");
+
+        CheckBox soundCheck = new CheckBox("Kritik Durumlarda Tahliye Sesi Çal (Temporal-3)");
+        soundCheck.setId("soundCheck");
+        soundCheck.setStyle("-fx-text-fill: #cbd5e1;");
+        soundCheck.setSelected(AppSettings.isSoundEnabled());
+
+        CheckBox notifCheck = new CheckBox("Duman/Ateş tespitinde arayüz uyarıları göster");
+        notifCheck.setId("notifCheck");
+        notifCheck.setStyle("-fx-text-fill: #cbd5e1;");
+        notifCheck.setSelected(AppSettings.isNotificationsEnabled());
+
+        Button saveBtn = new Button("Bildirim Ayarlarını Kaydet");
+        saveBtn.setId("saveNotifBtn");
+        saveBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 20; -fx-background-radius: 6;");
+        saveBtn.setOnAction(e -> {
+            AppSettings.setSoundEnabled(soundCheck.isSelected());
+            AppSettings.setNotificationsEnabled(notifCheck.isSelected());
+            AppSettings.save();
+            showAlert("Başarılı", "Bildirim ayarları kaydedildi.");
+        });
+
+        content.getChildren().addAll(sectionTitle, soundCheck, notifCheck, saveBtn);
+        tab.setContent(content);
+        return tab;
+    }
+
+    // ── 3. Operatör Yönetimi ────────────────────────────────────────────────
+
+    private Tab createOperatorTab() {
+        Tab tab = new Tab("👥 Operatör Yönetimi");
+        
+        VBox content = new VBox(20);
+        content.setPadding(new Insets(25));
+        content.setStyle("-fx-background-color: #1e293b; -fx-background-radius: 0 8 8 8;");
+
+        if (!SessionManager.isAdmin()) {
+            Label noAuth = new Label("Bu sayfayı görüntülemek için Yönetici (Admin) yetkisine sahip olmalısınız.");
+            noAuth.setStyle("-fx-text-fill: #ef4444; -fx-font-weight: bold; -fx-font-size: 16px;");
+            content.getChildren().add(noAuth);
+            tab.setContent(content);
+            return tab;
+        }
+
+        Label sectionTitle = new Label("Yetkili Operatörler");
+        sectionTitle.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: white;");
+
+        TableView<Operator> table = new TableView<>();
+        table.setPrefHeight(250);
+
+        TableColumn<Operator, String> colId = new TableColumn<>("Sicil No");
+        colId.setCellValueFactory(new PropertyValueFactory<>("employeeId"));
+        colId.setPrefWidth(100);
+
+        TableColumn<Operator, String> colName = new TableColumn<>("Ad Soyad");
+        colName.setCellValueFactory(new PropertyValueFactory<>("name"));
+        colName.setPrefWidth(200);
+
+        TableColumn<Operator, String> colRole = new TableColumn<>("Rol");
+        colRole.setCellValueFactory(new PropertyValueFactory<>("role"));
+        colRole.setPrefWidth(120);
+
+        TableColumn<Operator, String> colDate = new TableColumn<>("Kayıt Tarihi");
+        colDate.setCellValueFactory(new PropertyValueFactory<>("createdAt"));
+        colDate.setPrefWidth(180);
+
+        table.getColumns().addAll(colId, colName, colRole, colDate);
+        ObservableList<Operator> data = FXCollections.observableArrayList(operatorRepo.findAll());
+        table.setItems(data);
+
+        // Yeni operatör ekleme formu
+        GridPane form = new GridPane();
+        form.setHgap(15); form.setVgap(15);
+
+        TextField txtId = new TextField(); txtId.setId("txtOpId"); txtId.setPromptText("Sicil No");
+        TextField txtName = new TextField(); txtName.setId("txtOpName"); txtName.setPromptText("Ad Soyad");
+        PasswordField txtPass = new PasswordField(); txtPass.setId("txtOpPass"); txtPass.setPromptText("Şifre");
+        ComboBox<String> cmbRole = new ComboBox<>();
+        cmbRole.setId("cmbRole");
+        cmbRole.getItems().addAll("Operator", "Admin");
+        cmbRole.setValue("Operator");
+
+        Button btnAdd = new Button("Operatör Ekle");
+        btnAdd.setId("btnAddOp");
+        btnAdd.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; -fx-font-weight: bold;");
+        btnAdd.setOnAction(e -> {
+            if (txtId.getText().isEmpty() || txtName.getText().isEmpty() || txtPass.getText().isEmpty()) {
+                showAlert("Hata", "Lütfen tüm alanları doldurun.");
+                return;
+            }
+            Operator newOp = new Operator(txtName.getText(), txtId.getText(), txtPass.getText(), cmbRole.getValue());
+            if (operatorRepo.save(newOp)) {
+                data.setAll(operatorRepo.findAll());
+                txtId.clear(); txtName.clear(); txtPass.clear();
+                showAlert("Başarılı", "Yeni operatör eklendi.");
+            } else {
+                showAlert("Hata", "Operatör eklenemedi. Sicil no benzersiz olmalıdır.");
+            }
+        });
+
+        form.addRow(0, new Label("Sicil No:"), txtId, new Label("Ad Soyad:"), txtName);
+        form.addRow(1, new Label("Şifre:"), txtPass, new Label("Yetki:"), cmbRole);
+        form.add(btnAdd, 3, 2);
+
+        // Stil
+        form.getChildren().forEach(n -> {
+            if (n instanceof Label) ((Label)n).setStyle("-fx-text-fill: #cbd5e1;");
+        });
+
+        content.getChildren().addAll(sectionTitle, table, new Separator(), new Label("Yeni Operatör Kaydı"), form);
+        tab.setContent(content);
+        return tab;
+    }
+
+    private void showAlert(String title, String content) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.showAndWait();
     }
 }
